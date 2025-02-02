@@ -1,2 +1,2 @@
 # Crumple
-Automated proxmox cluster deployment tool
+Cluster architecting tool
