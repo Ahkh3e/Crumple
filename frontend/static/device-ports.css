@@ -1,0 +1,166 @@
+/* Port Styles */
+.port-button {
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.port-button::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #d1d5db;
+}
+
+.port-button.connected::before {
+    background-color: #10b981;
+}
+
+.port-button.selected {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+}
+
+/* Connection Line Styles */
+.connection-line {
+    position: absolute;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.connection-line path {
+    stroke: #6b7280;
+    stroke-width: 2;
+    fill: none;
+    stroke-dasharray: 4;
+    animation: dash 1s linear infinite;
+}
+
+@keyframes dash {
+    to {
+        stroke-dashoffset: -8;
+    }
+}
+
+/* Port Grid Layout */
+.port-grid {
+    display: grid;
+    gap: 0.5rem;
+}
+
+/* Power and Management Indicators */
+.power-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    transition: background-color 0.3s ease;
+}
+
+.power-indicator.on {
+    background-color: #10b981;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+.power-indicator.off {
+    background-color: #ef4444;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
+
+/* Port Status Colors */
+.port-status-available {
+    border-color: #d1d5db;
+}
+
+.port-status-connected {
+    border-color: #10b981;
+}
+
+.port-status-error {
+    border-color: #ef4444;
+}
+
+/* Port Hover Effects */
+.port-button:hover {
+    transform: scale(1.1);
+    z-index: 20;
+}
+
+.port-button:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0.25rem 0.5rem;
+    background-color: #1f2937;
+    color: white;
+    font-size: 0.75rem;
+    border-radius: 0.25rem;
+    white-space: nowrap;
+    z-index: 30;
+}
+
+/* Device Layout Styles */
+.device-ports {
+    position: relative;
+}
+
+.device-layout {
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    background-color: #f9fafb;
+}
+
+/* Management Port Styles */
+.management-port {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.management-port-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    border: 1px solid #d1d5db;
+}
+
+.management-port-indicator.active {
+    background-color: #3b82f6;
+    border-color: #2563eb;
+}
+
+/* Port Groups */
+.port-group {
+    border-left: 2px solid #e5e7eb;
+    padding-left: 1rem;
+    margin: 0.5rem 0;
+}
+
+.port-group-label {
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-bottom: 0.25rem;
+}
+
+/* Connection Animation */
+@keyframes connect {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.2);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.port-button.connecting {
+    animation: connect 0.3s ease;
+}

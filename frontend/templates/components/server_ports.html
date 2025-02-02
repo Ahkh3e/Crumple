@@ -1,0 +1,132 @@
+<div class="device-ports bg-white p-4 rounded-lg shadow-md">
+    <div class="device-info mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">{{ device.name }}</h3>
+        <p class="text-sm text-gray-600">{{ device.model }}</p>
+    </div>
+
+    <!-- Server Ports Layout -->
+    <div class="server-layout border rounded-lg p-4 mb-4">
+        <!-- Front Panel -->
+        <div class="front-panel mb-6">
+            <h4 class="text-sm font-medium text-gray-700 mb-2">Front Panel</h4>
+            <div class="flex space-x-4">
+                <div class="flex items-center">
+                    <span class="text-xs text-gray-600 mr-2">USB</span>
+                    <div class="w-6 h-3 border border-gray-300 rounded"></div>
+                </div>
+                <div class="flex items-center">
+                    <span class="text-xs text-gray-600 mr-2">VGA</span>
+                    <div class="w-4 h-4 border border-gray-300 rounded"></div>
+                </div>
+                <div class="flex items-center">
+                    <span class="text-xs text-gray-600 mr-2">iDRAC</span>
+                    <div class="w-4 h-4 border border-gray-300 rounded"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PCIe Slots -->
+        <div class="pcie-slots mb-6">
+            <h4 class="text-sm font-medium text-gray-700 mb-2">PCIe Slots</h4>
+            <div class="flex space-x-4">
+                {% for slot in range(2) %}
+                <div class="pcie-slot">
+                    <div class="text-xs text-gray-600 mb-1">PCIe {{ slot + 1 }}</div>
+                    <button class="port-button w-12 h-8 rounded border-2 flex items-center justify-center hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 {% if port.connected %}border-green-500{% else %}border-gray-300{% endif %}"
+                            data-port-id="{{ slot }}"
+                            data-port-type="qsfp-dd"
+                            data-port-speed="400G"
+                            title="Port {{ slot }} - QSFP-DD 400G {% if port.connected %}Connected to {{ port.connected_to }}{% else %}Available{% endif %}">
+                        <span class="text-xs font-medium text-gray-700">{{ slot }}</span>
+                    </button>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Power & Management -->
+        <div class="power-management">
+            <h4 class="text-sm font-medium text-gray-700 mb-2">Power & Management</h4>
+            <div class="flex justify-between items-center">
+                <div class="flex space-x-4">
+                    <div class="power-module flex items-center">
+                        <span class="text-sm text-gray-600 mr-2">PSU1</span>
+                        <div class="w-4 h-4 rounded-full {% if device.psu1_status == 'ok' %}bg-green-500{% else %}bg-red-500{% endif %}"></div>
+                    </div>
+                    <div class="power-module flex items-center">
+                        <span class="text-sm text-gray-600 mr-2">PSU2</span>
+                        <div class="w-4 h-4 rounded-full {% if device.psu2_status == 'ok' %}bg-green-500{% else %}bg-red-500{% endif %}"></div>
+                    </div>
+                </div>
+                <div class="flex space-x-4">
+                    <div class="management-port flex items-center">
+                        <span class="text-sm text-gray-600 mr-2">BMC</span>
+                        <div class="w-4 h-4 rounded-full border-2 border-gray-300"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Port Details -->
+    <div class="mt-4 border-t pt-4">
+        <h4 class="text-sm font-medium text-gray-900 mb-2">Port Details</h4>
+        <div class="text-sm text-gray-600">
+            <div class="flex justify-between mb-1">
+                <span>Type:</span>
+                <span>QSFP-DD</span>
+            </div>
+            <div class="flex justify-between mb-1">
+                <span>Speed:</span>
+                <span>400G</span>
+            </div>
+            <div class="flex justify-between">
+                <span>Status:</span>
+                <span id="selected-port-status">Select a port</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const portButtons = document.querySelectorAll('.port-button');
+    let selectedPort = null;
+
+    portButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            if (selectedPort === button) {
+                // Deselect port
+                button.classList.remove('ring-2', 'ring-blue-500');
+                selectedPort = null;
+                document.getElementById('selected-port-status').textContent = 'Select a port';
+            } else {
+                // Select port
+                if (selectedPort) {
+                    selectedPort.classList.remove('ring-2', 'ring-blue-500');
+                }
+                button.classList.add('ring-2', 'ring-blue-500');
+                selectedPort = button;
+                
+                // Update port details
+                const portNum = button.dataset.portId;
+                const portType = button.dataset.portType;
+                const portSpeed = button.dataset.portSpeed;
+                document.getElementById('selected-port-status').textContent = 
+                    `Port ${portNum} - ${portType.toUpperCase()} ${portSpeed}`;
+
+                // Emit port selection event
+                const event = new CustomEvent('port-selected', {
+                    detail: {
+                        portId: portNum,
+                        portType: portType,
+                        portSpeed: portSpeed,
+                        deviceId: '{{ device.id }}'
+                    }
+                });
+                document.dispatchEvent(event);
+            }
+        });
+    });
+});
+</script>

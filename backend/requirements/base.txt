@@ -1,0 +1,31 @@
+# API & Web Framework
+fastapi>=0.104.0
+flask>=3.0.0
+uvicorn>=0.24.0
+gunicorn>=21.2.0
+jinja2>=3.1.2
+
+# Database
+sqlalchemy>=2.0.23
+alembic>=1.12.1
+psycopg2-binary>=2.9.9
+asyncpg>=0.29.0
+
+# Task Queue & Caching
+celery>=5.3.4
+redis>=5.0.1
+aio-pika>=9.3.0
+
+# NetBox Integration
+pynetbox>=7.0.1
+aiohttp>=3.9.1
+
+# WebSockets & Real-time
+websockets>=12.0
+aioredis>=2.0.1
+
+# Utils & Validation
+pydantic>=2.4.2
+pydantic-settings>=2.0.0
+python-dotenv>=1.0.0
+httpx>=0.25.0

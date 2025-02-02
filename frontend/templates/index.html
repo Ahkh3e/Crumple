@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block head %}
+<link href="{{ url_for('static', filename='status-indicators.css') }}" rel="stylesheet">
+<link href="{{ url_for('static', filename='cytoscape.css') }}" rel="stylesheet">
+<script src="{{ url_for('static', filename='cytoscape-config.js') }}"></script>
+<script src="{{ url_for('static', filename='network-graph.js') }}"></script>
+<script src="{{ url_for('static', filename='status-updates.js') }}"></script>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto p-6">
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-gray-900">Network Topology Designer</h1>
+        <p class="text-gray-600 mt-2">Design and manage your network device clusters</p>
+    </div>
+
+    <!-- Statistics Overview -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-600">Total Devices</p>
+                    <h3 class="text-2xl font-bold text-gray-900">{{ total_devices }}</h3>
+                </div>
+                <div class="p-3 bg-blue-100 rounded-full">
+                    <i class="fas fa-hdd text-blue-600"></i>
+                </div>
+            </div>
+            <div class="mt-4 flex space-x-4 text-sm">
+                <span class="text-gray-500">
+                    <i class="fas fa-server mr-1"></i>{{ server_count }} Servers
+                </span>
+                <span class="text-gray-500">
+                    <i class="fas fa-network-wired mr-1"></i>{{ switch_count }} Switches
+                </span>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-600">Active Clusters</p>
+                    <h3 class="text-2xl font-bold text-gray-900">{{ active_clusters }}</h3>
+                </div>
+                <div class="p-3 bg-green-100 rounded-full">
+                    <i class="fas fa-server text-green-600"></i>
+                </div>
+            </div>
+            <div class="mt-4 flex space-x-4 text-sm">
+                <span class="text-gray-500">
+                    <i class="fas fa-check-circle mr-1"></i>{{ healthy_clusters }} Healthy
+                </span>
+                {% if warning_clusters > 0 %}
+                <span class="text-yellow-500">
+                    <i class="fas fa-exclamation-triangle mr-1"></i>{{ warning_clusters }} Warning
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-600">Total Connections</p>
+                    <h3 class="text-2xl font-bold text-gray-900">{{ total_connections }}</h3>
+                </div>
+                <div class="p-3 bg-purple-100 rounded-full">
+                    <i class="fas fa-plug text-purple-600"></i>
+                </div>
+            </div>
+            <div class="mt-4 flex space-x-4 text-sm">
+                <span class="text-gray-500">
+                    <i class="fas fa-link mr-1"></i>{{ active_connections }} Active
+                </span>
+                {% if pending_connections > 0 %}
+                <span class="text-yellow-500">
+                    <i class="fas fa-clock mr-1"></i>{{ pending_connections }} Pending
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-600">Device Types</p>
+                    <h3 class="text-2xl font-bold text-gray-900">{{ total_device_types }}</h3>
+                </div>
+                <div class="p-3 bg-indigo-100 rounded-full">
+                    <i class="fas fa-cube text-indigo-600"></i>
+                </div>
+            </div>
+            <div class="mt-4 flex space-x-4 text-sm">
+                <span class="text-gray-500">
+                    <i class="fas fa-box mr-1"></i>{{ manufacturer_count }} Manufacturers
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <a href="{{ url_for('new_cluster') }}" class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 hover:border-blue-500 transition-all">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-medium text-gray-900">New Cluster</h2>
+                <i class="fas fa-plus text-blue-600"></i>
+            </div>
+            <p class="text-sm text-gray-600">Create a new network topology with servers and switches</p>
+        </a>
+        <a href="{{ url_for('device_types') }}" class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 hover:border-blue-500 transition-all">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-medium text-gray-900">Device Types</h2>
+                <i class="fas fa-cube text-blue-600"></i>
+            </div>
+            <p class="text-sm text-gray-600">Manage device templates and their interfaces</p>
+        </a>
+        <a href="{{ url_for('devices') }}" class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 hover:border-blue-500 transition-all">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-medium text-gray-900">Devices</h2>
+                <i class="fas fa-hdd text-blue-600"></i>
+            </div>
+            <p class="text-sm text-gray-600">View and manage individual network devices</p>
+        </a>
+    </div>
+
+    <!-- Network Map -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-8">
+        <div class="p-4 border-b border-gray-200">
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-medium text-gray-900">Network Topology</h2>
+                <div class="flex space-x-2">
+                    <button onclick="cy.fit()" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                    <button onclick="cy.center()" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-crosshairs"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div id="cy"></div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Recent Clusters -->
+        <div class="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200">
+        <div class="p-4 border-b border-gray-200">
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-medium text-gray-900">Recent Clusters</h2>
+                <a href="{{ url_for('clusters') }}" class="text-sm text-blue-600 hover:text-blue-700">View All</a>
+            </div>
+        </div>
+        <div class="divide-y divide-gray-200 max-h-[400px] overflow-y-auto">
+            {% for cluster in clusters %}
+            <div class="p-4 hover:bg-gray-50">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900">{{ cluster.name }}</h3>
+                        <p class="text-sm text-gray-500 mt-1">{{ cluster.description }}</p>
+                        <div class="mt-2 flex items-center space-x-4 text-sm text-gray-500">
+                            <div class="flex items-center">
+                                <i class="fas fa-server mr-1"></i>
+                                <span>{{ cluster.devices|selectattr("device_type.category", "equalto", "server")|list|length }} Servers</span>
+                            </div>
+                            <div class="flex items-center">
+                                <i class="fas fa-network-wired mr-1"></i>
+                                <span>{{ cluster.devices|selectattr("device_type.category", "equalto", "switch")|list|length }} Switches</span>
+                            </div>
+                            <div class="flex items-center">
+                                <i class="fas fa-plug mr-1"></i>
+                                <span>{{ cluster.connections|length }} Connections</span>
+                            </div>
+                        </div>
+                    </div>
+                    <a href="{{ url_for('new_cluster', cluster_id=cluster.id) }}" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center py-12">
+                <i class="fas fa-server text-4xl text-gray-400 mb-4"></i>
+                <p class="text-gray-500">No clusters defined yet. Create one to get started.</p>
+            </div>
+            {% endfor %}
+        </div>
+        </div>
+        
+        <!-- System Status -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div class="p-4 border-b border-gray-200">
+                <h2 class="text-lg font-medium text-gray-900">System Status</h2>
+            </div>
+            <div class="p-4 space-y-4">
+                <div>
+                    <div class="status-indicator">
+                        <span class="text-sm font-medium text-gray-600">Database</span>
+                        <span class="status-badge status-badge-success">
+                            <i class="fas fa-check-circle mr-1"></i>Connected
+                        </span>
+                    </div>
+                    <div class="status-progress">
+                        <div class="status-progress-bar status-progress-success" style="width: {{ db_health }}%"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="status-indicator">
+                        <span class="text-sm font-medium text-gray-600">API Services</span>
+                        <span class="status-badge status-badge-success">
+                            <i class="fas fa-check-circle mr-1"></i>Operational
+                        </span>
+                    </div>
+                    <div class="status-progress">
+                        <div class="status-progress-bar status-progress-success" style="width: {{ api_health }}%"></div>
+                    </div>
+                </div>
+
+                <div id="netbox-status-container" class="{% if not netbox_status %}hidden{% endif %}"
+                     data-status="{{ netbox_status or 'error' }}">
+                    <div class="status-indicator">
+                        <span class="text-sm font-medium text-gray-600">NetBox Sync</span>
+                        <span id="netbox-status-badge" class="status-badge">
+                            <i id="netbox-status-icon" class="fas mr-1"></i>
+                            <span id="netbox-status-text">{{ netbox_status|title if netbox_status else '' }}</span>
+                        </span>
+                    </div>
+                    <div class="status-progress">
+                        <div id="netbox-health-bar" class="status-progress-bar" style="width: {{ netbox_health }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    initializeNetworkGraph();
+    initializeStatusUpdates();
+    
+    // Update network data periodically
+    setInterval(loadNetworkData, 30000);
+});
+</script>
+{% endblock %}
