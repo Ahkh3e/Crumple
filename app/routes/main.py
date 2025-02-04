@@ -1,8 +1,9 @@
 import json
 from flask import Blueprint, render_template, jsonify, request, current_app
+from flask_wtf.csrf import generate_csrf
 from ..models import Cluster, Device, Connection
 from ..services import NetboxService, RabbitMQService
-from .. import db
+from .. import db, csrf, limiter
 
 bp = Blueprint('main', __name__)
 
@@ -10,7 +11,7 @@ bp = Blueprint('main', __name__)
 def index():
     """Render main workboard page"""
     clusters = Cluster.query.all()
-    return render_template('index.html', clusters=clusters)
+    return render_template('index.html', clusters=clusters, csrf_token_value=generate_csrf())
 
 @bp.route('/api/clusters')
 def list_clusters():
@@ -74,6 +75,7 @@ def sync_cluster(cluster_id):
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/clusters/<cluster_id>/sync/status', methods=['GET'])
+@limiter.limit("60/minute")  # Increased rate limit for status checks
 def get_sync_status(cluster_id):
     """Get cluster sync status"""
     try:
@@ -87,6 +89,7 @@ def get_sync_status(cluster_id):
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/clusters/<cluster_id>/layout', methods=['POST'])
+@csrf.exempt  # Exempt this endpoint since it's called frequently
 def save_layout(cluster_id):
     """Save Cytoscape layout positions"""
     try:

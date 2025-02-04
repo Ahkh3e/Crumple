@@ -221,6 +221,7 @@
 {% endblock %}
 
 {% block content %}
+<input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
 <div id="workboard">
     <!-- Sidebar -->
     <div id="sidebar">
@@ -268,6 +269,13 @@ $(document).ready(function() {
     let layoutTimeout = null;
     let syncStatusInterval = null;
 
+    // Add CSRF token to all AJAX requests
+    $.ajaxSetup({
+        headers: {
+            'X-CSRF-Token': $('input[name="csrf_token"]').val()
+        }
+    });
+
     // Show loading state
     function showLoading() {
         $('#cy').html('<div class="flex items-center justify-center h-full"><div class="text-gray-500">Loading...</div></div>');
@@ -280,37 +288,35 @@ $(document).ready(function() {
 
     // Poll for sync status
     function pollSyncStatus(clusterId) {
-        // Clear any existing interval
         if (syncStatusInterval) {
             clearInterval(syncStatusInterval);
         }
 
-        // Function to check sync status
         const checkSyncStatus = () => {
-            $.get(`/api/clusters/${clusterId}/sync/status`)
-                .done(function(data) {
-                    const clusterBtn = $(`.cluster-btn[data-cluster-id="${clusterId}"]`);
-                    if (data.sync_in_progress) {
-                        clusterBtn.addClass('syncing');
-                    } else {
-                        clusterBtn.removeClass('syncing');
-                        // If sync was in progress and now it's done, refresh the cluster data
-                        if (clusterBtn.data('was-syncing')) {
-                            loadCluster(clusterId);
-                        }
+            $.ajax({
+                url: `/api/clusters/${clusterId}/sync/status`,
+                method: 'GET',
+                credentials: 'same-origin'
+            })
+            .done(function(data) {
+                const clusterBtn = $(`.cluster-btn[data-cluster-id="${clusterId}"]`);
+                if (data.sync_in_progress) {
+                    clusterBtn.addClass('syncing');
+                } else {
+                    clusterBtn.removeClass('syncing');
+                    if (clusterBtn.data('was-syncing')) {
+                        loadCluster(clusterId);
                     }
-                    clusterBtn.data('was-syncing', data.sync_in_progress);
-                })
-                .fail(function(jqXHR, textStatus, errorThrown) {
-                    console.error('Failed to get sync status:', errorThrown);
-                });
+                }
+                clusterBtn.data('was-syncing', data.sync_in_progress);
+            })
+            .fail(function(jqXHR, textStatus, errorThrown) {
+                console.error('Failed to get sync status:', errorThrown);
+            });
         };
 
-        // Check immediately
         checkSyncStatus();
-
-        // Then check every 5 seconds
-        syncStatusInterval = setInterval(checkSyncStatus, 5000);
+        syncStatusInterval = setInterval(checkSyncStatus, 10000); // Poll every 10 seconds instead of 5
     }
 
     // Initialize Cytoscape
@@ -400,53 +406,53 @@ $(document).ready(function() {
         }
         
         showLoading();
-
-        // Start polling for sync status
         pollSyncStatus(clusterId);
         
-        $.get(`/api/clusters/${clusterId}`)
-            .done(function(data) {
-                try {
-                    if (!data || typeof data !== 'object') {
-                        throw new Error('Invalid response format');
-                    }
-
-                    if (!data.elements) {
-                        throw new Error('No elements data in response');
-                    }
-
-                    const { nodes = [], edges = [] } = data.elements;
-                    
-                    if (nodes.length === 0 && edges.length === 0) {
-                        showError('No devices or connections found in this cluster');
-                        return;
-                    }
-
-                    // Validate node data
-                    nodes.forEach(node => {
-                        if (!node.data || !node.data.id || !node.data.label) {
-                            console.warn('Invalid node data:', node);
-                        }
-                    });
-
-                    // Validate edge data
-                    edges.forEach(edge => {
-                        if (!edge.data || !edge.data.source || !edge.data.target) {
-                            console.warn('Invalid edge data:', edge);
-                        }
-                    });
-
-                    initCytoscape(data.elements);
-                    applyLayout($('#layoutSelect').val());
-                } catch (error) {
-                    console.error('Error processing cluster data:', error);
-                    showError('Error processing cluster data: ' + error.message);
+        $.ajax({
+            url: `/api/clusters/${clusterId}`,
+            method: 'GET',
+            credentials: 'same-origin'
+        })
+        .done(function(data) {
+            try {
+                if (!data || typeof data !== 'object') {
+                    throw new Error('Invalid response format');
                 }
-            })
-            .fail(function(jqXHR, textStatus, errorThrown) {
-                console.error('Failed to load cluster:', errorThrown);
-                showError(`Failed to load cluster data: ${jqXHR.status === 404 ? 'Cluster not found' : 'Server error'}`);
-            });
+
+                if (!data.elements) {
+                    throw new Error('No elements data in response');
+                }
+
+                const { nodes = [], edges = [] } = data.elements;
+                
+                if (nodes.length === 0 && edges.length === 0) {
+                    showError('No devices or connections found in this cluster');
+                    return;
+                }
+
+                nodes.forEach(node => {
+                    if (!node.data || !node.data.id || !node.data.label) {
+                        console.warn('Invalid node data:', node);
+                    }
+                });
+
+                edges.forEach(edge => {
+                    if (!edge.data || !edge.data.source || !edge.data.target) {
+                        console.warn('Invalid edge data:', edge);
+                    }
+                });
+
+                initCytoscape(data.elements);
+                applyLayout($('#layoutSelect').val());
+            } catch (error) {
+                console.error('Error processing cluster data:', error);
+                showError('Error processing cluster data: ' + error.message);
+            }
+        })
+        .fail(function(jqXHR, textStatus, errorThrown) {
+            console.error('Failed to load cluster:', errorThrown);
+            showError(`Failed to load cluster data: ${jqXHR.status === 404 ? 'Cluster not found' : 'Server error'}`);
+        });
     }
 
     // Show device information in floating window
@@ -468,11 +474,6 @@ $(document).ready(function() {
             `).join('');
         
         const nodeData = deviceData.data || deviceData;
-        // Debug logging
-        console.log('Raw device data:', deviceData);
-        console.log('Node data:', nodeData);
-        console.log('Meta data:', nodeData.meta_data);
-        console.log('Role from meta_data:', nodeData.meta_data ? nodeData.meta_data.role : 'No role found');
         $('#deviceDetails').html(`
             <div class="device-section">
                 <div><span class="device-label">Device:</span> ${nodeData.label || 'Unnamed Device'}</div>
@@ -499,16 +500,14 @@ $(document).ready(function() {
         const containerOffset = cyContainer.offset();
         const infoWindow = $('#deviceInfo');
         
-        // Calculate position relative to the container
-        let left = containerOffset.left + renderedPosition.x + 40; // 40px to the right of node
+        let left = containerOffset.left + renderedPosition.x + 40;
         let top = containerOffset.top + renderedPosition.y - infoWindow.height() / 2;
 
-        // Ensure the window stays within viewport
         const windowWidth = $(window).width();
         const windowHeight = $(window).height();
         
         if (left + infoWindow.width() > windowWidth) {
-            left = containerOffset.left + renderedPosition.x - infoWindow.width() - 40; // Show on left side
+            left = containerOffset.left + renderedPosition.x - infoWindow.width() - 40;
         }
         
         if (top < 0) {
@@ -522,23 +521,20 @@ $(document).ready(function() {
             top: top + 'px'
         }).show();
 
-        // Close info window when clicking outside
         const closeHandler = function(e) {
             const $target = $(e.target);
-            // Check if click is outside both the info window and the cytoscape container
             if (!$target.closest('#deviceInfo').length && !$target.closest('#cy').length) {
                 hideDeviceInfo();
             }
         };
         
-        // Remove any existing handlers before adding new one
         $(document).off('click.deviceInfo').on('click.deviceInfo', closeHandler);
     }
 
     function hideDeviceInfo() {
         $('#deviceInfo').hide();
         $('#deviceDetails').empty();
-        $(document).off('click.deviceInfo'); // Remove namespaced click handler
+        $(document).off('click.deviceInfo');
     }
 
     // Apply layout
@@ -550,7 +546,7 @@ $(document).ready(function() {
 
         if (!name || typeof name !== 'string') {
             console.warn('Invalid layout name:', name);
-            name = 'grid'; // fallback to grid layout
+            name = 'grid';
         }
         
         const layouts = {
@@ -598,14 +594,12 @@ $(document).ready(function() {
             const l = cy.layout(layout);
             
             l.one('layoutstop', function() {
-                // Save positions after layout is complete
                 saveLayout();
             });
 
             l.run();
         } catch (error) {
             console.error('Error applying layout:', error);
-            // Try fallback to grid layout if the chosen layout fails
             if (name !== 'grid') {
                 console.log('Falling back to grid layout');
                 applyLayout('grid');
@@ -626,7 +620,8 @@ $(document).ready(function() {
             url: `/api/clusters/${selectedClusterId}/layout`,
             method: 'POST',
             contentType: 'application/json',
-            data: JSON.stringify(positions)
+            data: JSON.stringify(positions),
+            credentials: 'same-origin'
         })
         .done(function() {
             console.log('Layout saved successfully');
