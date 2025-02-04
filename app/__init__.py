@@ -67,36 +67,39 @@ def create_app(config_name='default'):
     login_manager.login_view = 'auth.login'
     login_manager.login_message = 'Please log in to access this page.'
     
-    # Create database tables and initialize admin user
+    # Create database tables and initialize required data
     with app.app_context():
-        db.create_all()
-        
-        # Ensure schemas exist using text()
-        db.session.execute(text('CREATE SCHEMA IF NOT EXISTS workboard'))
-        db.session.execute(text('CREATE SCHEMA IF NOT EXISTS netbox'))
-        db.session.commit()
-        
-        # Create admin user if it doesn't exist
-        from .models.user import User
-        admin = User.query.filter_by(username='admin').first()
-        if not admin:
-            admin = User(username='admin', is_admin=True)
-            admin.password = 'admin'  # This uses the password setter to hash
-            db.session.add(admin)
+        try:
+            # Create schemas first
+            db.session.execute(text('CREATE SCHEMA IF NOT EXISTS workboard'))
+            db.session.execute(text('CREATE SCHEMA IF NOT EXISTS netbox'))
             db.session.commit()
-
-        # Initialize AppSettings if it doesn't exist
-        from .models.settings import AppSettings
-        settings = AppSettings.get_settings()
-        if not settings:
-            settings = AppSettings(
-                netbox_url='',
-                netbox_token='',
-                sync_interval=300,
-                is_connected=False
-            )
-            db.session.add(settings)
-            db.session.commit()
+            
+            # Then create all tables
+            db.create_all()
+            
+            # Create admin user using the User model's create_admin method
+            from .models.user import User
+            admin = User.create_admin(username='admin', password='admin')
+            if admin:
+                print("Created initial admin user")
+            
+            # Initialize AppSettings if it doesn't exist
+            from .models.settings import AppSettings
+            settings = AppSettings.get_settings()
+            if not settings:
+                settings = AppSettings(
+                    netbox_url='',
+                    netbox_token='',
+                    sync_interval=300,
+                    is_connected=False
+                )
+                db.session.add(settings)
+                db.session.commit()
+        except Exception as e:
+            print(f"Error during initialization: {str(e)}")
+            db.session.rollback()
+            raise
     
     @app.after_request
     def after_request(response):
