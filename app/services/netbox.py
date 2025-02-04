@@ -227,7 +227,6 @@ class NetboxService:
                     
                     # Create connection
                     connection = Connection(
-                        netbox_id=cable_id,
                         cluster_id=cluster.id,
                         device_a_id=Device.query.filter_by(name=a_term['device']['name']).first().id,
                         interface_a=a_term['name'],

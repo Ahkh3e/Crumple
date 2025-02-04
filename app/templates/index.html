@@ -121,12 +121,31 @@
         padding: 16px;
         min-width: 240px;
         max-width: 320px;
+        max-height: 80vh;
+        overflow-y: auto;
         z-index: 1000;
         display: none;
         border: 1px solid #dee2e6;
         pointer-events: auto;
         font-size: 0.9rem;
         line-height: 1.5;
+    }
+
+    .device-info::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    .device-info::-webkit-scrollbar-track {
+        background: #f8f9fa;
+    }
+    
+    .device-info::-webkit-scrollbar-thumb {
+        background: #dee2e6;
+        border-radius: 3px;
+    }
+    
+    .device-info::-webkit-scrollbar-thumb:hover {
+        background: #adb5bd;
     }
     
     .device-info h5 {
@@ -448,15 +467,19 @@ $(document).ready(function() {
                 </div>
             `).join('');
         
+        const nodeData = deviceData.data || deviceData;
+        console.log('Device data:', nodeData);
+        console.log('Meta data:', nodeData.meta_data);
+        console.log('Role:', nodeData.meta_data?.role);
         $('#deviceDetails').html(`
             <div class="device-section">
-                <div><span class="device-label">Device:</span> ${deviceData.label || 'Unnamed Device'}</div>
-                <div><span class="device-label">Type:</span> ${deviceData.type || 'N/A'}</div>
-                <div><span class="device-label">Role:</span> ${deviceData.meta_data?.role || 'N/A'}</div>
+                <div><span class="device-label">Device:</span> ${nodeData.label || 'Unnamed Device'}</div>
+                <div><span class="device-label">Type:</span> ${nodeData.type || 'N/A'}</div>
+                <div><span class="device-label">Role:</span> ${nodeData.meta_data?.role || 'N/A'}</div>
             </div>
             <div class="interface-section">
                 <div class="interface-header">Interfaces</div>
-                ${deviceData.interfaces ? deviceData.interfaces.map(iface => `
+                ${nodeData.interfaces ? nodeData.interfaces.map(iface => `
                     <div class="interface-item">
                         <div class="interface-name">${iface.name}</div>
                         <div class="interface-details">
