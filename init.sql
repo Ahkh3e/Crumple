@@ -9,6 +9,23 @@ ALTER DATABASE crumple SET row_security = on;
 CREATE SCHEMA IF NOT EXISTS netbox;
 CREATE SCHEMA IF NOT EXISTS workboard;
 
+-- Ensure workboard schema exists
+CREATE SCHEMA IF NOT EXISTS workboard;
+
+-- Drop and recreate users table to ensure clean state
+DROP TABLE IF EXISTS workboard.users CASCADE;
+
+-- Create users table
+CREATE TABLE workboard.users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(64) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,  -- Increased length to accommodate longer hashes
+    is_admin BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+
 -- Create app settings table
 CREATE TABLE workboard.app_settings (
     id SERIAL PRIMARY KEY,
@@ -31,6 +48,7 @@ CREATE TABLE workboard.clusters (
     layout_data JSONB,
     meta_data JSONB,
     last_sync TIMESTAMP WITH TIME ZONE,
+    sync_in_progress BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -94,3 +112,21 @@ CREATE TRIGGER update_connections_timestamp
 CREATE TRIGGER update_app_settings_timestamp
     BEFORE UPDATE ON workboard.app_settings
     FOR EACH ROW EXECUTE PROCEDURE update_timestamp();
+
+CREATE TRIGGER update_users_timestamp
+    BEFORE UPDATE ON workboard.users
+    FOR EACH ROW EXECUTE PROCEDURE update_timestamp();
+
+-- Function to hash existing tokens
+CREATE OR REPLACE FUNCTION hash_existing_tokens()
+RETURNS void AS $$
+BEGIN
+    UPDATE workboard.app_settings
+    SET netbox_token = 'pbkdf2:sha256:600000$' || encode(sha256(netbox_token::bytea), 'hex')
+    WHERE netbox_token IS NOT NULL
+    AND netbox_token NOT LIKE 'pbkdf2:sha256:%';
+END;
+$$ LANGUAGE plpgsql;
+
+-- Execute token hashing
+SELECT hash_existing_tokens();

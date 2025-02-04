@@ -5,8 +5,14 @@ class Config:
     # Base directory
     BASE_DIR = Path(__file__).resolve().parent
 
-    # Flask
+    # Flask and Security
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')
+    WTF_CSRF_SECRET_KEY = os.getenv('WTF_CSRF_SECRET_KEY', 'csrf-dev-key')
+    WTF_CSRF_ENABLED = True
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    PERMANENT_SESSION_LIFETIME = 1800  # 30 minutes
     
     # Database - Using internal Docker network hostname
     SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'postgresql://crumple:crumple@postgres:5432/crumple')

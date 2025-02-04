@@ -26,7 +26,8 @@ class NetboxService:
         """Initialize with optional URL and token, otherwise load from settings"""
         settings = AppSettings.get_settings()
         self.base_url = url or settings.netbox_url
-        self.token = token or settings.netbox_token
+        # Use the actual token from settings if not provided
+        self.token = token or settings.get_token()
         self.verify_ssl = verify_ssl if verify_ssl is not None else settings.verify_ssl
         self.timeout = timeout or settings.timeout
 

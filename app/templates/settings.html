@@ -30,6 +30,7 @@
 
         <!-- Settings Form -->
         <form id="settings-form" class="space-y-6">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
             <!-- Netbox URL -->
             <div>
                 <label for="netbox_url" class="block text-sm font-medium text-gray-700">
@@ -144,21 +145,36 @@ document.addEventListener('DOMContentLoaded', function() {
             const response = await fetch('/settings/api/settings', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': '{{ csrf_token_value }}'
                 },
-                body: JSON.stringify(formData)
+                body: JSON.stringify(formData),
+                credentials: 'same-origin',
+                redirect: 'error'  // Prevent redirects
             });
 
-            const data = await response.json();
-            
-            if (response.ok) {
-                updateConnectionStatus(data.is_connected);
-                showMessage('Settings saved successfully', 'success');
-            } else {
-                showMessage(data.error || 'Failed to save settings', 'error');
+            if (response.redirected) {
+                window.location.href = response.url;
+                return;
             }
+
+            if (!response.ok) {
+                const text = await response.text();
+                console.error('Response:', text);
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Response was not JSON');
+            }
+
+            const data = await response.json();
+            updateConnectionStatus(data.is_connected);
+            showMessage('Settings saved successfully', 'success');
         } catch (error) {
-            showMessage('Failed to save settings', 'error');
+            console.error('Error:', error);
+            showMessage('Failed to save settings: ' + error.message, 'error');
         }
     });
 
@@ -166,21 +182,38 @@ document.addEventListener('DOMContentLoaded', function() {
     testButton.addEventListener('click', async function() {
         try {
             const response = await fetch('/settings/api/test-connection', {
-                method: 'POST'
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': '{{ csrf_token_value }}'
+                },
+                credentials: 'same-origin',
+                redirect: 'error'
             });
 
-            const data = await response.json();
-            
-            if (response.ok) {
-                updateConnectionStatus(true);
-                showMessage('Connection successful', 'success');
-            } else {
-                updateConnectionStatus(false);
-                showMessage(data.message || 'Connection failed', 'error');
+            if (response.redirected) {
+                window.location.href = response.url;
+                return;
             }
+
+            if (!response.ok) {
+                const text = await response.text();
+                console.error('Response:', text);
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Response was not JSON');
+            }
+
+            const data = await response.json();
+            updateConnectionStatus(true);
+            showMessage('Connection successful', 'success');
         } catch (error) {
+            console.error('Error:', error);
             updateConnectionStatus(false);
-            showMessage('Connection failed', 'error');
+            showMessage('Connection failed: ' + error.message, 'error');
         }
     });
 
@@ -192,37 +225,105 @@ document.addEventListener('DOMContentLoaded', function() {
 
         try {
             const response = await fetch('/settings/api/sync-now', {
-                method: 'POST'
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': '{{ csrf_token_value }}'
+                },
+                credentials: 'same-origin',
+                redirect: 'error'
             });
 
+            if (response.redirected) {
+                window.location.href = response.url;
+                return;
+            }
+
+            if (!response.ok) {
+                const text = await response.text();
+                console.error('Response:', text);
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Response was not JSON');
+            }
+
             const data = await response.json();
-            
-            if (response.ok) {
-                showMessage('Sync completed successfully', 'success');
-                if (data.last_sync && lastSyncElement) {
-                    lastSyncElement.textContent = `Last Sync: ${data.last_sync}`;
-                }
-            } else {
-                showMessage(data.message || 'Sync failed', 'error');
+            showMessage('Sync completed successfully', 'success');
+            if (data.last_sync && lastSyncElement) {
+                lastSyncElement.textContent = `Last Sync: ${data.last_sync}`;
             }
         } catch (error) {
-            showMessage('Sync failed', 'error');
+            console.error('Error:', error);
+            showMessage('Sync failed: ' + error.message, 'error');
         } finally {
             spinner.classList.add('hidden');
             syncButton.disabled = false;
         }
     });
 
+    // Update connection status periodically
+    async function updateNavConnectionStatus() {
+        try {
+            const response = await fetch('/settings/api/settings', {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-Token': '{{ csrf_token_value }}'
+                },
+                credentials: 'same-origin',
+                redirect: 'error'
+            });
+
+            if (response.redirected) {
+                window.location.href = response.url;
+                return;
+            }
+
+            if (!response.ok) {
+                const text = await response.text();
+                console.error('Response:', text);
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Response was not JSON');
+            }
+
+            const data = await response.json();
+            updateConnectionStatus(data.is_connected);
+        } catch (error) {
+            console.error('Failed to fetch connection status:', error);
+            // Don't update status on error to avoid flickering
+        }
+    }
+
     function updateConnectionStatus(isConnected) {
-        statusElement.textContent = isConnected ? 'Connected' : 'Not Connected';
-        statusElement.className = `px-3 py-1 rounded-full text-sm font-semibold ${
-            isConnected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-        }`;
+        if (statusElement) {  // Check if element exists
+            statusElement.textContent = isConnected ? 'Connected' : 'Not Connected';
+            statusElement.className = `px-3 py-1 rounded-full text-sm font-semibold ${
+                isConnected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+            }`;
+        }
     }
 
     function showMessage(message, type) {
-        // You can implement this using your preferred notification system
+        console.log(`${type}: ${message}`);
         alert(message);
+    }
+
+    // Update status every 30 seconds if we're on the settings page
+    if (window.location.pathname.includes('/settings')) {
+        updateNavConnectionStatus();
+        const intervalId = setInterval(updateNavConnectionStatus, 30000);
+
+        // Cleanup interval when leaving the page
+        window.addEventListener('beforeunload', () => {
+            clearInterval(intervalId);
+        });
     }
 });
 </script>
