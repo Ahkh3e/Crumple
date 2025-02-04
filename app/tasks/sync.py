@@ -43,9 +43,26 @@ def perform_sync(settings=None):
                 logger.info(f"[Sync {sync_id}] Processing cluster {cluster_id}")
                 
                 try:
+                    # Get cluster from database
+                    from ..models import Cluster
+                    cluster = Cluster.query.filter_by(netbox_id=cluster_id).first()
+                    if cluster:
+                        cluster.sync_in_progress = True
+                        db.session.commit()
+                    
+                    # Perform sync
                     netbox.sync_cluster(cluster_id)
+                    
+                    # Update sync status
+                    if cluster:
+                        cluster.sync_in_progress = False
+                        cluster.last_sync = datetime.utcnow()
+                        db.session.commit()
                 except Exception as e:
                     logger.error(f"[Sync {sync_id}] Error syncing cluster {cluster_id}: {str(e)}")
+                    if cluster:
+                        cluster.sync_in_progress = False
+                        db.session.commit()
                     continue
             
             # Update sync status
@@ -63,7 +80,12 @@ def perform_sync(settings=None):
     except Exception as e:
         logger.error(f"[Sync {sync_id}] Sync failed: {str(e)}")
         settings.is_connected = False
+        
+        # Reset sync_in_progress for all clusters
+        from ..models import Cluster
+        Cluster.query.update({Cluster.sync_in_progress: False})
         db.session.commit()
+        
         return False, str(e)
 
 def run_sync():

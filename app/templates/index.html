@@ -5,6 +5,7 @@
     #workboard {
         display: flex;
         height: 100vh;
+        position: relative;
     }
     
     #sidebar {
@@ -69,6 +70,7 @@
         margin-right: 8px;
         font-size: 0.7em;
         color: #adb5bd;
+        transition: all 0.2s ease;
     }
     
     .cluster-btn:hover {
@@ -82,6 +84,16 @@
     
     .cluster-btn.active:before {
         color: white;
+    }
+
+    .cluster-btn.syncing:before {
+        animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.3; }
+        100% { opacity: 1; }
     }
     
     .layout-select {
@@ -102,30 +114,67 @@
     }
     
     .device-info {
-        color: #495057;
-        padding: 8px;
+        position: fixed;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        padding: 16px;
+        min-width: 240px;
+        max-width: 320px;
+        z-index: 1000;
         display: none;
+        border: 1px solid #dee2e6;
+        pointer-events: auto;
+        font-size: 0.9rem;
+        line-height: 1.5;
     }
     
     .device-info h5 {
         color: #495057;
-        font-size: 0.8rem;
-        margin: 0 0 8px 0;
-    }
-    
-    .interface-list {
-        max-height: 300px;
-        overflow-y: auto;
         font-size: 0.9rem;
-    }
-    
-    .interface-item {
-        padding: 6px 8px;
+        font-weight: 600;
+        margin: 0 0 16px 0;
+        padding-bottom: 8px;
         border-bottom: 1px solid #dee2e6;
     }
-    
-    .interface-item:last-child {
-        border-bottom: none;
+
+    .device-section {
+        margin-bottom: 12px;
+    }
+
+    .device-label {
+        color: #495057;
+        font-weight: 600;
+        display: inline-block;
+        min-width: 80px;
+    }
+
+    .interface-section {
+        margin-top: 16px;
+        border-top: 1px solid #dee2e6;
+        padding-top: 12px;
+    }
+
+    .interface-header {
+        color: #495057;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    .interface-item {
+        margin: 12px 0;
+        padding-left: 8px;
+    }
+
+    .interface-name {
+        color: #495057;
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+
+    .interface-details {
+        color: #6c757d;
+        padding-left: 12px;
     }
     
     .text-muted {
@@ -178,245 +227,432 @@
                 <option value="cose">CoSE</option>
             </select>
         </div>
-        
-        <div id="deviceInfo" class="device-info">
-            <h5>Device Information</h5>
-            <div id="deviceDetails"></div>
-        </div>
     </div>
     
     <!-- Cytoscape Container -->
     <div id="cy"></div>
+
+    <!-- Floating Device Info -->
+    <div id="deviceInfo" class="device-info">
+        <h5>Device Information</h5>
+        <div id="deviceDetails"></div>
+    </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-let cy = null;
-let selectedClusterId = null;
-let selectedDeviceId = null;
+$(document).ready(function() {
+    let cy = null;
+    let selectedClusterId = null;
+    let selectedDeviceId = null;
+    let layoutTimeout = null;
+    let syncStatusInterval = null;
 
-// Initialize Cytoscape
-function initCytoscape(elements) {
-    if (cy) {
-        cy.destroy();
+    // Show loading state
+    function showLoading() {
+        $('#cy').html('<div class="flex items-center justify-center h-full"><div class="text-gray-500">Loading...</div></div>');
     }
-    
-    cy = cytoscape({
-        container: document.getElementById('cy'),
-        elements: elements,
-        style: [
-            {
-                selector: 'node',
-                style: {
-                    'label': 'data(label)',
-                    'text-valign': 'center',
-                    'text-halign': 'center',
-                    'background-color': '#666',
-                    'width': 60,
-                    'height': 60
-                }
-            },
-            {
-                selector: 'edge',
-                style: {
-                    'label': function(ele) {
-                        return `${ele.data('sourceInterface')} → ${ele.data('targetInterface')}`;
-                    },
-                    'curve-style': 'bezier',
-                    'target-arrow-shape': 'triangle',
-                    'line-color': '#999',
-                    'target-arrow-color': '#999',
-                    'text-rotation': 'autorotate'
-                }
-            },
-            {
-                selector: ':selected',
-                style: {
-                    'background-color': '#337ab7',
-                    'line-color': '#337ab7',
-                    'target-arrow-color': '#337ab7'
-                }
-            }
-        ],
-        layout: {
-            name: 'grid'
-        }
-    });
-    
-    // Node selection event
-    cy.on('tap', 'node', function(evt) {
-        const node = evt.target;
-        selectedDeviceId = node.id();
-        showDeviceInfo(node.data());
-    });
-    
-    // Click on background to deselect
-    cy.on('tap', function(evt) {
-        if (evt.target === cy) {
-            selectedDeviceId = null;
-            hideDeviceInfo();
-        }
-    });
-}
 
-// Load cluster data
-function loadCluster(clusterId) {
-    selectedClusterId = clusterId;
-    
-    if (!clusterId) {
+    // Show error state
+    function showError(message) {
+        $('#cy').html(`<div class="flex items-center justify-center h-full"><div class="text-red-500">${message}</div></div>`);
+    }
+
+    // Poll for sync status
+    function pollSyncStatus(clusterId) {
+        // Clear any existing interval
+        if (syncStatusInterval) {
+            clearInterval(syncStatusInterval);
+        }
+
+        // Function to check sync status
+        const checkSyncStatus = () => {
+            $.get(`/api/clusters/${clusterId}/sync/status`)
+                .done(function(data) {
+                    const clusterBtn = $(`.cluster-btn[data-cluster-id="${clusterId}"]`);
+                    if (data.sync_in_progress) {
+                        clusterBtn.addClass('syncing');
+                    } else {
+                        clusterBtn.removeClass('syncing');
+                        // If sync was in progress and now it's done, refresh the cluster data
+                        if (clusterBtn.data('was-syncing')) {
+                            loadCluster(clusterId);
+                        }
+                    }
+                    clusterBtn.data('was-syncing', data.sync_in_progress);
+                })
+                .fail(function(jqXHR, textStatus, errorThrown) {
+                    console.error('Failed to get sync status:', errorThrown);
+                });
+        };
+
+        // Check immediately
+        checkSyncStatus();
+
+        // Then check every 5 seconds
+        syncStatusInterval = setInterval(checkSyncStatus, 5000);
+    }
+
+    // Initialize Cytoscape
+    function initCytoscape(elements) {
         if (cy) {
             cy.destroy();
-            cy = null;
         }
-        return;
-    }
-    
-    $.get(`/api/clusters/${clusterId}`)
-        .done(function(data) {
-            initCytoscape(data.elements);
-            applyLayout($('#layoutSelect').val());
+
+        $('#cy').empty();
+        
+        cy = cytoscape({
+            container: document.getElementById('cy'),
+            elements: elements,
+            style: [
+                {
+                    selector: 'node',
+                    style: {
+                        'label': 'data(label)',
+                        'text-valign': 'center',
+                        'text-halign': 'center',
+                        'background-color': '#666',
+                        'width': 60,
+                        'height': 60
+                    }
+                },
+                {
+                    selector: 'edge',
+                    style: {
+                        'label': function(ele) {
+                            return `${ele.data('sourceInterface')} → ${ele.data('targetInterface')}`;
+                        },
+                        'curve-style': 'bezier',
+                        'target-arrow-shape': 'triangle',
+                        'line-color': '#999',
+                        'target-arrow-color': '#999',
+                        'text-rotation': 'autorotate'
+                    }
+                },
+                {
+                    selector: ':selected',
+                    style: {
+                        'background-color': '#337ab7',
+                        'line-color': '#337ab7',
+                        'target-arrow-color': '#337ab7'
+                    }
+                }
+            ],
+            layout: {
+                name: 'grid'
+            }
         });
-}
+        
+        // Node selection event
+        cy.on('tap', 'node', function(evt) {
+            const node = evt.target;
+            selectedDeviceId = node.id();
+            showDeviceInfo(node.data(), node);
+        });
+        
+        // Click on background to deselect
+        cy.on('tap', function(evt) {
+            if (evt.target === cy) {
+                selectedDeviceId = null;
+                hideDeviceInfo();
+            }
+        });
 
-// Show device information in sidebar
-function showDeviceInfo(deviceData) {
-    const interfaces = Object.entries(deviceData.interfaces || {})
-        .map(([name, info]) => `
-            <div class="interface-item">
-                <strong>${name}</strong>
-                <div class="text-muted small">
-                    Type: ${info.type || 'N/A'}<br>
-                    Status: ${info.enabled ? 'Enabled' : 'Disabled'}
-                </div>
-            </div>
-        `).join('');
-    
-    $('#deviceDetails').html(`
-        <div class="mb-2">
-            <strong>${deviceData.label}</strong>
-        </div>
-        <div class="mb-2 text-muted">
-            ${deviceData.type || 'N/A'}
-        </div>
-        <div class="interface-list">
-            ${interfaces}
-        </div>
-    `);
-    
-    $('#deviceInfo').show();
-}
+        // Set up auto-save for layout changes
+        setupLayoutAutoSave();
+    }
 
-function hideDeviceInfo() {
-    $('#deviceInfo').hide();
-}
-
-// Apply layout
-function applyLayout(name) {
-    if (!cy) return;
-    
-    const layouts = {
-        'grid': {
-            name: 'grid',
-            padding: 50
-        },
-        'circle': {
-            name: 'circle',
-            padding: 50
-        },
-        'concentric': {
-            name: 'concentric',
-            minNodeSpacing: 50
-        },
-        'breadthfirst': {
-            name: 'breadthfirst',
-            padding: 50
-        },
-        'cose': {
-            name: 'cose',
-            padding: 50
+    // Load cluster data
+    function loadCluster(clusterId) {
+        selectedClusterId = clusterId;
+        
+        if (!clusterId) {
+            if (cy) {
+                cy.destroy();
+                cy = null;
+            }
+            hideDeviceInfo();
+            if (syncStatusInterval) {
+                clearInterval(syncStatusInterval);
+                syncStatusInterval = null;
+            }
+            return;
         }
-    };
-    
-    cy.layout(layouts[name]).run();
-}
+        
+        showLoading();
 
-// Save layout
-function saveLayout() {
-    if (!selectedClusterId || !cy) return;
-    
-    const positions = {};
-    cy.nodes().forEach(node => {
-        positions[node.id()] = node.position();
-    });
-    
-    $.ajax({
-        url: `/api/clusters/${selectedClusterId}/layout`,
-        method: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify(positions)
-    }).done(function() {
-        showAlert('success', 'Layout saved');
-    });
-}
+        // Start polling for sync status
+        pollSyncStatus(clusterId);
+        
+        $.get(`/api/clusters/${clusterId}`)
+            .done(function(data) {
+                try {
+                    if (!data || typeof data !== 'object') {
+                        throw new Error('Invalid response format');
+                    }
 
-// Event handlers
-document.addEventListener('DOMContentLoaded', function() {
-    const searchInput = document.getElementById('clusterSearch');
-    if (!searchInput) {
-        console.error('Search input not found');
-        return;
+                    if (!data.elements) {
+                        throw new Error('No elements data in response');
+                    }
+
+                    const { nodes = [], edges = [] } = data.elements;
+                    
+                    if (nodes.length === 0 && edges.length === 0) {
+                        showError('No devices or connections found in this cluster');
+                        return;
+                    }
+
+                    // Validate node data
+                    nodes.forEach(node => {
+                        if (!node.data || !node.data.id || !node.data.label) {
+                            console.warn('Invalid node data:', node);
+                        }
+                    });
+
+                    // Validate edge data
+                    edges.forEach(edge => {
+                        if (!edge.data || !edge.data.source || !edge.data.target) {
+                            console.warn('Invalid edge data:', edge);
+                        }
+                    });
+
+                    initCytoscape(data.elements);
+                    applyLayout($('#layoutSelect').val());
+                } catch (error) {
+                    console.error('Error processing cluster data:', error);
+                    showError('Error processing cluster data: ' + error.message);
+                }
+            })
+            .fail(function(jqXHR, textStatus, errorThrown) {
+                console.error('Failed to load cluster:', errorThrown);
+                showError(`Failed to load cluster data: ${jqXHR.status === 404 ? 'Cluster not found' : 'Server error'}`);
+            });
+    }
+
+    // Show device information in floating window
+    function showDeviceInfo(deviceData, node) {
+        if (!deviceData) {
+            console.error('No device data provided');
+            return;
+        }
+
+        const interfaces = Object.entries(deviceData.interfaces || {})
+            .map(([name, info]) => `
+                <div class="interface-item">
+                    <strong>${name}</strong>
+                    <div class="text-muted small">
+                        Type: ${info.type || 'N/A'}<br>
+                        Status: ${info.enabled ? 'Enabled' : 'Disabled'}
+                    </div>
+                </div>
+            `).join('');
+        
+        $('#deviceDetails').html(`
+            <div class="device-section">
+                <div><span class="device-label">Device:</span> ${deviceData.label || 'Unnamed Device'}</div>
+                <div><span class="device-label">Type:</span> ${deviceData.type || 'N/A'}</div>
+                <div><span class="device-label">Role:</span> ${deviceData.meta_data?.role || 'N/A'}</div>
+            </div>
+            <div class="interface-section">
+                <div class="interface-header">Interfaces</div>
+                ${deviceData.interfaces ? deviceData.interfaces.map(iface => `
+                    <div class="interface-item">
+                        <div class="interface-name">${iface.name}</div>
+                        <div class="interface-details">
+                            Type: ${iface.type || 'N/A'}<br>
+                            Status: ${iface.enabled ? 'Enabled' : 'Disabled'}
+                        </div>
+                    </div>
+                `).join('') : '<div class="text-muted">No interfaces found</div>'}
+            </div>
+        `);
+
+        // Position the info window near the node
+        const renderedPosition = node.renderedPosition();
+        const cyContainer = $('#cy');
+        const containerOffset = cyContainer.offset();
+        const infoWindow = $('#deviceInfo');
+        
+        // Calculate position relative to the container
+        let left = containerOffset.left + renderedPosition.x + 40; // 40px to the right of node
+        let top = containerOffset.top + renderedPosition.y - infoWindow.height() / 2;
+
+        // Ensure the window stays within viewport
+        const windowWidth = $(window).width();
+        const windowHeight = $(window).height();
+        
+        if (left + infoWindow.width() > windowWidth) {
+            left = containerOffset.left + renderedPosition.x - infoWindow.width() - 40; // Show on left side
+        }
+        
+        if (top < 0) {
+            top = 0;
+        } else if (top + infoWindow.height() > windowHeight) {
+            top = windowHeight - infoWindow.height();
+        }
+
+        infoWindow.css({
+            left: left + 'px',
+            top: top + 'px'
+        }).show();
+
+        // Close info window when clicking outside
+        const closeHandler = function(e) {
+            const $target = $(e.target);
+            // Check if click is outside both the info window and the cytoscape container
+            if (!$target.closest('#deviceInfo').length && !$target.closest('#cy').length) {
+                hideDeviceInfo();
+            }
+        };
+        
+        // Remove any existing handlers before adding new one
+        $(document).off('click.deviceInfo').on('click.deviceInfo', closeHandler);
+    }
+
+    function hideDeviceInfo() {
+        $('#deviceInfo').hide();
+        $('#deviceDetails').empty();
+        $(document).off('click.deviceInfo'); // Remove namespaced click handler
+    }
+
+    // Apply layout
+    function applyLayout(name) {
+        if (!cy) {
+            console.warn('Cannot apply layout: Cytoscape instance not initialized');
+            return;
+        }
+
+        if (!name || typeof name !== 'string') {
+            console.warn('Invalid layout name:', name);
+            name = 'grid'; // fallback to grid layout
+        }
+        
+        const layouts = {
+            'grid': {
+                name: 'grid',
+                padding: 50,
+                fit: true,
+                animate: true,
+                animationDuration: 500
+            },
+            'circle': {
+                name: 'circle',
+                padding: 50,
+                fit: true,
+                animate: true,
+                animationDuration: 500
+            },
+            'concentric': {
+                name: 'concentric',
+                minNodeSpacing: 50,
+                fit: true,
+                animate: true,
+                animationDuration: 500
+            },
+            'breadthfirst': {
+                name: 'breadthfirst',
+                padding: 50,
+                fit: true,
+                animate: true,
+                animationDuration: 500
+            },
+            'cose': {
+                name: 'cose',
+                padding: 50,
+                fit: true,
+                animate: true,
+                animationDuration: 500,
+                nodeRepulsion: 8000,
+                idealEdgeLength: 100
+            }
+        };
+
+        try {
+            const layout = layouts[name] || layouts['grid'];
+            const l = cy.layout(layout);
+            
+            l.one('layoutstop', function() {
+                // Save positions after layout is complete
+                saveLayout();
+            });
+
+            l.run();
+        } catch (error) {
+            console.error('Error applying layout:', error);
+            // Try fallback to grid layout if the chosen layout fails
+            if (name !== 'grid') {
+                console.log('Falling back to grid layout');
+                applyLayout('grid');
+            }
+        }
+    }
+
+    // Save layout with error handling
+    function saveLayout() {
+        if (!selectedClusterId || !cy) return;
+        
+        const positions = {};
+        cy.nodes().forEach(node => {
+            positions[node.id()] = node.position();
+        });
+        
+        $.ajax({
+            url: `/api/clusters/${selectedClusterId}/layout`,
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(positions)
+        })
+        .done(function() {
+            console.log('Layout saved successfully');
+        })
+        .fail(function(jqXHR, textStatus, errorThrown) {
+            console.error('Failed to save layout:', errorThrown);
+        });
     }
 
     // Filter clusters
     function filterClusters() {
-        const searchTerm = searchInput.value.toLowerCase().trim();
-        console.log('Filtering with term:', searchTerm);
-        
-        // Get fresh list of buttons each time
-        const clusterButtons = document.getElementById('clusterButtons');
-        if (!clusterButtons) {
-            console.error('Cluster buttons container not found');
-            return;
-        }
-
-        const buttons = clusterButtons.getElementsByClassName('cluster-btn');
-        console.log('Found buttons:', buttons.length);
-
-        Array.from(buttons).forEach(button => {
-            const clusterName = button.textContent.toLowerCase().trim();
-            console.log('Button text:', clusterName);
-            button.style.display = clusterName.includes(searchTerm) ? 'flex' : 'none';
+        const searchTerm = $('#clusterSearch').val().toLowerCase().trim();
+        $('.cluster-btn').each(function() {
+            const clusterName = $(this).text().toLowerCase().trim();
+            $(this).toggle(clusterName.includes(searchTerm));
         });
     }
 
-    // Add input event listener
-    searchInput.addEventListener('input', filterClusters);
-    
-    // Initial filter in case there's a value
-    filterClusters();
+    // Set up layout auto-save
+    function setupLayoutAutoSave() {
+        if (!cy) return;
+        
+        cy.on('position', 'node', function() {
+            clearTimeout(layoutTimeout);
+            layoutTimeout = setTimeout(saveLayout, 1000);
+        });
+    }
 
-    // Cluster button clicks
-    document.getElementById('clusterButtons').addEventListener('click', function(e) {
-        if (e.target.classList.contains('cluster-btn')) {
-            const clusterId = e.target.dataset.clusterId;
-            document.querySelectorAll('.cluster-btn').forEach(btn => btn.classList.remove('active'));
-            e.target.classList.add('active');
-            loadCluster(clusterId);
-        }
+    // Event Handlers Setup
+    $('#clusterSearch').on('input', filterClusters);
+    
+    $('#clusterButtons').on('click', '.cluster-btn', function() {
+        const clusterId = $(this).data('clusterId');
+        $('.cluster-btn').removeClass('active');
+        $(this).addClass('active');
+        loadCluster(clusterId);
     });
 
-    // Layout changes
-    document.getElementById('layoutSelect').addEventListener('change', function() {
+    $('#layoutSelect').on('change', function() {
         applyLayout(this.value);
     });
-});
 
-// Auto-save layout when nodes are moved
-let layoutTimeout;
-cy?.on('position', 'node', function() {
-    clearTimeout(layoutTimeout);
-    layoutTimeout = setTimeout(saveLayout, 1000);
+    // Initialize first cluster
+    const firstClusterBtn = $('.cluster-btn').first();
+    if (firstClusterBtn.length) {
+        firstClusterBtn.addClass('active');
+        loadCluster(firstClusterBtn.data('clusterId'));
+    }
+
+    // Initial filter
+    filterClusters();
 });
 </script>
 {% endblock %}

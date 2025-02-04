@@ -37,8 +37,8 @@ def get_cluster(cluster_id):
                     'id': str(device.id),
                     'label': device.name,
                     'type': device.device_type,
-                    'interfaces': device.interfaces,
-                    'metadata': device.metadata
+                    'interfaces': list(device.interfaces) if device.interfaces else [],
+                    'metadata': dict(device.meta_data) if device.meta_data else {}
                 },
                 'position': device.position or {'x': 0, 'y': 0}
             }
@@ -56,13 +56,34 @@ def get_cluster(cluster_id):
 def sync_cluster(cluster_id):
     """Trigger cluster sync"""
     try:
+        cluster = Cluster.query.get_or_404(cluster_id)
+        
+        # Don't schedule if sync already in progress
+        if cluster.sync_in_progress:
+            return jsonify({'status': 'sync already in progress'})
+        
         # Schedule sync task
         rabbitmq = RabbitMQService.from_app(current_app)
         if rabbitmq.schedule_sync(int(cluster_id)):
+            cluster.sync_in_progress = True
+            db.session.commit()
             return jsonify({'status': 'sync scheduled'})
         return jsonify({'error': 'failed to schedule sync'}), 500
     except Exception as e:
         current_app.logger.error(f"Error scheduling sync: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/api/clusters/<cluster_id>/sync/status', methods=['GET'])
+def get_sync_status(cluster_id):
+    """Get cluster sync status"""
+    try:
+        cluster = Cluster.query.get_or_404(cluster_id)
+        return jsonify({
+            'sync_in_progress': cluster.sync_in_progress,
+            'last_sync': cluster.last_sync.isoformat() if cluster.last_sync else None
+        })
+    except Exception as e:
+        current_app.logger.error(f"Error getting sync status: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/clusters/<cluster_id>/layout', methods=['POST'])
@@ -98,15 +119,15 @@ def export_cluster(cluster_id):
                 'name': cluster.name,
                 'type': cluster.type,
                 'netbox_id': cluster.netbox_id,
-                'metadata': cluster.metadata
+                'metadata': dict(cluster.meta_data) if cluster.meta_data else {}
             },
             'devices': [
                 {
                     'name': device.name,
                     'type': device.device_type,
                     'netbox_id': device.netbox_id,
-                    'interfaces': device.interfaces,
-                    'metadata': device.metadata
+                    'interfaces': list(device.interfaces) if device.interfaces else [],
+                    'metadata': dict(device.meta_data) if device.meta_data else {}
                 }
                 for device in devices
             ],
@@ -116,7 +137,7 @@ def export_cluster(cluster_id):
                     'device_b': conn.device_b.name,
                     'interface_a': conn.interface_a,
                     'interface_b': conn.interface_b,
-                    'metadata': conn.metadata
+                    'metadata': dict(conn.meta_data) if conn.meta_data else {}
                 }
                 for conn in connections
             ]

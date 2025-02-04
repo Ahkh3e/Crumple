@@ -14,6 +14,7 @@ class Cluster(db.Model):
     layout_data = db.Column(JSONB)  # For Cytoscape layout
     meta_data = db.Column(JSONB)  # For Netbox metadata
     last_sync = db.Column(db.DateTime(timezone=True))
+    sync_in_progress = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.current_timestamp())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=db.func.current_timestamp())
 
@@ -51,6 +52,7 @@ class Cluster(db.Model):
             'layout_data': dict(self.layout_data) if self.layout_data else {},
             'meta_data': dict(self.meta_data) if self.meta_data else {},
             'last_sync': self.last_sync.isoformat() if self.last_sync else None,
+            'sync_in_progress': self.sync_in_progress,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
