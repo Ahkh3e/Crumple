@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-md p-6">
+        <h1 class="text-2xl font-bold mb-6">Netbox Configuration</h1>
+        
+        <!-- Connection Status -->
+        <div class="mb-6">
+            <div class="flex items-center">
+                <span class="mr-2">Connection Status:</span>
+                <span id="connection-status" 
+                      class="px-3 py-1 rounded-full text-sm font-semibold 
+                      {% if settings.is_connected %}
+                      bg-green-100 text-green-800
+                      {% else %}
+                      bg-red-100 text-red-800
+                      {% endif %}">
+                    {{ 'Connected' if settings.is_connected else 'Not Connected' }}
+                </span>
+            </div>
+            {% if settings.last_sync %}
+            <div id="last-sync" class="text-sm text-gray-600 mt-1">
+                Last Sync: {{ settings.last_sync.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Settings Form -->
+        <form id="settings-form" class="space-y-6">
+            <!-- Netbox URL -->
+            <div>
+                <label for="netbox_url" class="block text-sm font-medium text-gray-700">
+                    Netbox URL
+                </label>
+                <input type="url" name="netbox_url" id="netbox_url"
+                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                       value="{{ settings.netbox_url }}"
+                       placeholder="https://netbox.example.com"
+                       required>
+            </div>
+
+            <!-- API Token -->
+            <div>
+                <label for="netbox_token" class="block text-sm font-medium text-gray-700">
+                    API Token
+                </label>
+                <input type="password" name="netbox_token" id="netbox_token"
+                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                       value="{{ settings.netbox_token }}"
+                       placeholder="Enter your Netbox API token"
+                       required>
+            </div>
+
+            <!-- Sync Interval -->
+            <div>
+                <label for="sync_interval" class="block text-sm font-medium text-gray-700">
+                    Sync Interval (seconds)
+                </label>
+                <input type="number" name="sync_interval" id="sync_interval"
+                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                       value="{{ settings.sync_interval }}"
+                       min="60"
+                       required>
+            </div>
+
+            <!-- Connection Settings -->
+            <div class="space-y-4">
+                <h3 class="text-lg font-medium text-gray-900">Connection Settings</h3>
+                
+                <!-- SSL Verification -->
+                <div class="flex items-center">
+                    <input type="checkbox" name="verify_ssl" id="verify_ssl"
+                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                           {% if settings.verify_ssl %}checked{% endif %}>
+                    <label for="verify_ssl" class="ml-2 block text-sm text-gray-700">
+                        Verify SSL Certificate
+                    </label>
+                </div>
+
+                <!-- Timeout -->
+                <div>
+                    <label for="timeout" class="block text-sm font-medium text-gray-700">
+                        Connection Timeout (seconds)
+                    </label>
+                    <input type="number" name="timeout" id="timeout"
+                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                           value="{{ settings.timeout }}"
+                           min="1"
+                           max="300"
+                           required>
+                </div>
+            </div>
+
+            <!-- Buttons -->
+            <div class="flex space-x-4">
+                <button type="submit"
+                        class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Save Settings
+                </button>
+                <button type="button" id="test-connection"
+                        class="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Test Connection
+                </button>
+                <button type="button" id="sync-now"
+                        class="inline-flex items-center justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-700 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Sync Now
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('settings-form');
+    const testButton = document.getElementById('test-connection');
+    const syncButton = document.getElementById('sync-now');
+    const statusElement = document.getElementById('connection-status');
+    const lastSyncElement = document.getElementById('last-sync');
+
+    // Update settings
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            netbox_url: form.netbox_url.value,
+            netbox_token: form.netbox_token.value,
+            sync_interval: parseInt(form.sync_interval.value),
+            verify_ssl: form.verify_ssl.checked,
+            timeout: parseInt(form.timeout.value)
+        };
+
+        try {
+            const response = await fetch('/settings/api/settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formData)
+            });
+
+            const data = await response.json();
+            
+            if (response.ok) {
+                updateConnectionStatus(data.is_connected);
+                showMessage('Settings saved successfully', 'success');
+            } else {
+                showMessage(data.error || 'Failed to save settings', 'error');
+            }
+        } catch (error) {
+            showMessage('Failed to save settings', 'error');
+        }
+    });
+
+    // Test connection
+    testButton.addEventListener('click', async function() {
+        try {
+            const response = await fetch('/settings/api/test-connection', {
+                method: 'POST'
+            });
+
+            const data = await response.json();
+            
+            if (response.ok) {
+                updateConnectionStatus(true);
+                showMessage('Connection successful', 'success');
+            } else {
+                updateConnectionStatus(false);
+                showMessage(data.message || 'Connection failed', 'error');
+            }
+        } catch (error) {
+            updateConnectionStatus(false);
+            showMessage('Connection failed', 'error');
+        }
+    });
+
+    // Sync now
+    syncButton.addEventListener('click', async function() {
+        const spinner = syncButton.querySelector('svg');
+        spinner.classList.remove('hidden');
+        syncButton.disabled = true;
+
+        try {
+            const response = await fetch('/settings/api/sync-now', {
+                method: 'POST'
+            });
+
+            const data = await response.json();
+            
+            if (response.ok) {
+                showMessage('Sync completed successfully', 'success');
+                if (data.last_sync && lastSyncElement) {
+                    lastSyncElement.textContent = `Last Sync: ${data.last_sync}`;
+                }
+            } else {
+                showMessage(data.message || 'Sync failed', 'error');
+            }
+        } catch (error) {
+            showMessage('Sync failed', 'error');
+        } finally {
+            spinner.classList.add('hidden');
+            syncButton.disabled = false;
+        }
+    });
+
+    function updateConnectionStatus(isConnected) {
+        statusElement.textContent = isConnected ? 'Connected' : 'Not Connected';
+        statusElement.className = `px-3 py-1 rounded-full text-sm font-semibold ${
+            isConnected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+        }`;
+    }
+
+    function showMessage(message, type) {
+        // You can implement this using your preferred notification system
+        alert(message);
+    }
+});
+</script>
+{% endblock %}

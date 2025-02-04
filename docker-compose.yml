@@ -1,0 +1,80 @@
+version: '3.8'
+services:
+  web:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+    ports:
+      - "3000:3000"  # Changed to port 3000
+    environment:
+      DATABASE_URL: postgresql://crumple:crumple@postgres:5432/crumple
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      FLASK_ENV: development
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
+      PORT: 3000  # Set port in environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    networks:
+      - crumple_frontend  # For external access
+      - crumple_backend   # For internal services
+    
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    environment:
+      DATABASE_URL: postgresql://crumple:crumple@postgres:5432/crumple
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    networks:
+      - crumple_backend
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: crumple
+      POSTGRES_USER: crumple
+      POSTGRES_PASSWORD: crumple
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crumple"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crumple_backend
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crumple_backend
+
+networks:
+  crumple_frontend:  # Network for external access
+    driver: bridge
+  crumple_backend:   # Internal network for services
+    driver: bridge
+    internal: true   # No external connectivity
+
+volumes:
+  postgres_data:

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{% endblock %} - Crumple</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+    {% block head %}{% endblock %}
+</head>
+<body class="bg-gray-100">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <!-- Logo -->
+                    <div class="flex-shrink-0 flex items-center">
+                        <a href="/" class="text-xl font-bold text-gray-800">Crumple</a>
+                    </div>
+                    
+                    <!-- Navigation Links -->
+                    <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+                        <a href="/" 
+                           class="inline-flex items-center px-1 pt-1 border-b-2 {% if request.endpoint == 'main.index' %}border-blue-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %}">
+                            Clusters
+                        </a>
+                        <a href="/settings"
+                           class="inline-flex items-center px-1 pt-1 border-b-2 {% if request.endpoint == 'settings.index' %}border-blue-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %}">
+                            Settings
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Connection Status -->
+                <div class="hidden sm:ml-6 sm:flex sm:items-center">
+                    <div id="nav-connection-status"></div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Content -->
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Scripts -->
+    <script>
+        // Fetch connection status periodically
+        async function updateNavConnectionStatus() {
+            try {
+                const response = await fetch('/settings/api/settings');
+                const data = await response.json();
+                const statusElement = document.getElementById('nav-connection-status');
+                
+                if (statusElement) {
+                    statusElement.innerHTML = `
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${
+                            data.is_connected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }">
+                            ${data.is_connected ? 'Connected to Netbox' : 'Not Connected'}
+                        </span>
+                    `;
+                }
+            } catch (error) {
+                console.error('Failed to fetch connection status:', error);
+            }
+        }
+
+        // Update status every 30 seconds
+        updateNavConnectionStatus();
+        setInterval(updateNavConnectionStatus, 30000);
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
