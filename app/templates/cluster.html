@@ -33,69 +33,6 @@
         white-space: nowrap;
     }
     
-    .search-input {
-        width: 100%;
-        padding: 6px 8px;
-        margin: 4px 0;
-        border: 1px solid #dee2e6;
-        border-radius: 4px;
-        font-size: 0.9rem;
-        background-color: white;
-    }
-    
-    .search-input:focus {
-        outline: none;
-        border-color: #0d6efd;
-        box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
-    }
-    
-    .cluster-btn {
-        width: 100%;
-        padding: 8px 12px;
-        margin: 2px 0;
-        background: transparent;
-        border: none;
-        color: #495057;
-        text-align: left;
-        white-space: nowrap;
-        transition: all 0.2s ease;
-        border-radius: 4px;
-        display: flex;
-        align-items: center;
-        font-size: 0.9rem;
-    }
-    
-    .cluster-btn:before {
-        content: "⬤";
-        margin-right: 8px;
-        font-size: 0.7em;
-        color: #adb5bd;
-        transition: all 0.2s ease;
-    }
-    
-    .cluster-btn:hover {
-        background-color: #e9ecef;
-    }
-    
-    .cluster-btn.active {
-        background-color: #0d6efd;
-        color: white;
-    }
-    
-    .cluster-btn.active:before {
-        color: white;
-    }
-
-    .cluster-btn.syncing:before {
-        animation: pulse 1s infinite;
-    }
-
-    @keyframes pulse {
-        0% { opacity: 1; }
-        50% { opacity: 0.3; }
-        100% { opacity: 1; }
-    }
-    
     .layout-select {
         width: 100%;
         padding: 6px 8px;
@@ -200,22 +137,28 @@
         color: #6c757d !important;
     }
 
-    /* Scrollbar styling */
-    #sidebar::-webkit-scrollbar {
-        width: 6px;
+    .back-link {
+        margin: 8px;
+        display: inline-block;
+        color: #0d6efd;
+        text-decoration: none;
+        font-size: 0.9rem;
     }
-    
-    #sidebar::-webkit-scrollbar-track {
-        background: #f8f9fa;
+
+    .back-link:hover {
+        text-decoration: underline;
     }
-    
-    #sidebar::-webkit-scrollbar-thumb {
-        background: #dee2e6;
-        border-radius: 3px;
+
+    .cluster-header {
+        margin: 8px;
+        padding: 8px;
+        border-bottom: 1px solid #dee2e6;
     }
-    
-    #sidebar::-webkit-scrollbar-thumb:hover {
-        background: #adb5bd;
+
+    .cluster-header h4 {
+        margin: 0;
+        color: #495057;
+        font-size: 1.1rem;
     }
 </style>
 {% endblock %}
@@ -226,14 +169,9 @@
     <!-- Sidebar -->
     <div id="sidebar">
         <div class="sidebar-section">
-            <h5>Clusters</h5>
-            <input type="text" class="search-input" placeholder="Search clusters..." id="clusterSearch">
-            <div id="clusterButtons">
-                {% for cluster in clusters %}
-                <a href="/clusters/{{ cluster.id }}" class="cluster-btn">
-                    {{ cluster.name }}
-                </a>
-                {% endfor %}
+            <a href="/" class="back-link">← Back to All Clusters</a>
+            <div class="cluster-header">
+                <h4>{{ cluster.name }}</h4>
             </div>
         </div>
         
@@ -264,10 +202,10 @@
 <script>
 $(document).ready(function() {
     let cy = null;
-    let selectedClusterId = null;
     let selectedDeviceId = null;
     let layoutTimeout = null;
     let syncStatusInterval = null;
+    const clusterId = '{{ cluster.id }}';
 
     // Add CSRF token to all AJAX requests
     $.ajaxSetup({
@@ -287,7 +225,7 @@ $(document).ready(function() {
     }
 
     // Poll for sync status
-    function pollSyncStatus(clusterId) {
+    function pollSyncStatus() {
         if (syncStatusInterval) {
             clearInterval(syncStatusInterval);
         }
@@ -299,16 +237,12 @@ $(document).ready(function() {
                 credentials: 'same-origin'
             })
             .done(function(data) {
-                const clusterBtn = $(`.cluster-btn[data-cluster-id="${clusterId}"]`);
-                if (data.sync_in_progress) {
-                    clusterBtn.addClass('syncing');
-                } else {
-                    clusterBtn.removeClass('syncing');
-                    if (clusterBtn.data('was-syncing')) {
-                        loadCluster(clusterId);
-                    }
+                if (data.sync_in_progress && !window.wassyncing) {
+                    window.wassyncing = true;
+                } else if (!data.sync_in_progress && window.wassyncing) {
+                    window.wassyncing = false;
+                    loadCluster();
                 }
-                clusterBtn.data('was-syncing', data.sync_in_progress);
             })
             .fail(function(jqXHR, textStatus, errorThrown) {
                 console.error('Failed to get sync status:', errorThrown);
@@ -316,7 +250,7 @@ $(document).ready(function() {
         };
 
         checkSyncStatus();
-        syncStatusInterval = setInterval(checkSyncStatus, 10000); // Poll every 10 seconds instead of 5
+        syncStatusInterval = setInterval(checkSyncStatus, 10000);
     }
 
     // Initialize Cytoscape
@@ -373,7 +307,8 @@ $(document).ready(function() {
                 }
             ],
             layout: {
-                name: 'grid'
+                name: 'grid',
+                padding: 50
             }
         });
         
@@ -397,24 +332,9 @@ $(document).ready(function() {
     }
 
     // Load cluster data
-    function loadCluster(clusterId) {
-        selectedClusterId = clusterId;
-        
-        if (!clusterId) {
-            if (cy) {
-                cy.destroy();
-                cy = null;
-            }
-            hideDeviceInfo();
-            if (syncStatusInterval) {
-                clearInterval(syncStatusInterval);
-                syncStatusInterval = null;
-            }
-            return;
-        }
-        
+    function loadCluster() {
         showLoading();
-        pollSyncStatus(clusterId);
+        pollSyncStatus();
         
         $.ajax({
             url: `/api/clusters/${clusterId}`,
@@ -438,18 +358,6 @@ $(document).ready(function() {
                     return;
                 }
 
-                nodes.forEach(node => {
-                    if (!node.data || !node.data.id || !node.data.label) {
-                        console.warn('Invalid node data:', node);
-                    }
-                });
-
-                edges.forEach(edge => {
-                    if (!edge.data || !edge.data.source || !edge.data.target) {
-                        console.warn('Invalid edge data:', edge);
-                    }
-                });
-
                 initCytoscape(data.elements);
                 applyLayout($('#layoutSelect').val());
             } catch (error) {
@@ -470,17 +378,6 @@ $(document).ready(function() {
             return;
         }
 
-        const interfaces = Object.entries(deviceData.interfaces || {})
-            .map(([name, info]) => `
-                <div class="interface-item">
-                    <strong>${name}</strong>
-                    <div class="text-muted small">
-                        Type: ${info.type || 'N/A'}<br>
-                        Status: ${info.enabled ? 'Enabled' : 'Disabled'}
-                    </div>
-                </div>
-            `).join('');
-        
         const nodeData = deviceData.data || deviceData;
         $('#deviceDetails').html(`
             <div class="device-section">
@@ -617,7 +514,7 @@ $(document).ready(function() {
 
     // Save layout with error handling
     function saveLayout() {
-        if (!selectedClusterId || !cy) return;
+        if (!cy) return;
         
         const positions = {};
         cy.nodes().forEach(node => {
@@ -625,7 +522,7 @@ $(document).ready(function() {
         });
         
         $.ajax({
-            url: `/api/clusters/${selectedClusterId}/layout`,
+            url: `/api/clusters/${clusterId}/layout`,
             method: 'POST',
             contentType: 'application/json',
             data: JSON.stringify(positions),
@@ -636,15 +533,6 @@ $(document).ready(function() {
         })
         .fail(function(jqXHR, textStatus, errorThrown) {
             console.error('Failed to save layout:', errorThrown);
-        });
-    }
-
-    // Filter clusters
-    function filterClusters() {
-        const searchTerm = $('#clusterSearch').val().toLowerCase().trim();
-        $('.cluster-btn').each(function() {
-            const clusterName = $(this).text().toLowerCase().trim();
-            $(this).toggle(clusterName.includes(searchTerm));
         });
     }
 
@@ -659,28 +547,12 @@ $(document).ready(function() {
     }
 
     // Event Handlers Setup
-    $('#clusterSearch').on('input', filterClusters);
-    
-    $('#clusterButtons').on('click', '.cluster-btn', function() {
-        const clusterId = $(this).data('clusterId');
-        $('.cluster-btn').removeClass('active');
-        $(this).addClass('active');
-        loadCluster(clusterId);
-    });
-
     $('#layoutSelect').on('change', function() {
         applyLayout(this.value);
     });
 
-    // Initialize first cluster
-    const firstClusterBtn = $('.cluster-btn').first();
-    if (firstClusterBtn.length) {
-        firstClusterBtn.addClass('active');
-        loadCluster(firstClusterBtn.data('clusterId'));
-    }
-
-    // Initial filter
-    filterClusters();
+    // Initialize cluster
+    loadCluster();
 });
 </script>
 {% endblock %}

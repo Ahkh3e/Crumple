@@ -13,6 +13,12 @@ def index():
     clusters = Cluster.query.all()
     return render_template('index.html', clusters=clusters, csrf_token_value=generate_csrf())
 
+@bp.route('/clusters/<cluster_id>')
+def view_cluster(cluster_id):
+    """Render individual cluster view"""
+    cluster = Cluster.query.get_or_404(cluster_id)
+    return render_template('cluster.html', cluster=cluster, csrf_token_value=generate_csrf())
+
 @bp.route('/api/clusters')
 def list_clusters():
     """List all clusters"""
