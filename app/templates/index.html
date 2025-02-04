@@ -337,7 +337,10 @@ $(document).ready(function() {
                         'label': 'data(label)',
                         'text-valign': 'center',
                         'text-halign': 'center',
-                        'background-color': '#666',
+                        'background-color': function(ele) {
+                            const data = ele.data();
+                            return data.metadata && data.metadata.role_color ? data.metadata.role_color : '#666';
+                        },
                         'width': 60,
                         'height': 60
                     }
@@ -349,9 +352,8 @@ $(document).ready(function() {
                             return `${ele.data('sourceInterface')} → ${ele.data('targetInterface')}`;
                         },
                         'curve-style': 'bezier',
-                        'target-arrow-shape': 'triangle',
-                        'line-color': '#999',
-                        'target-arrow-color': '#999',
+                        'line-color': '#4fb7f3',
+                        'width': 2,
                         'text-rotation': 'autorotate'
                     }
                 },
@@ -359,8 +361,7 @@ $(document).ready(function() {
                     selector: ':selected',
                     style: {
                         'background-color': '#337ab7',
-                        'line-color': '#337ab7',
-                        'target-arrow-color': '#337ab7'
+                        'line-color': '#337ab7'
                     }
                 }
             ],

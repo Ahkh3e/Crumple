@@ -32,14 +32,23 @@ class Device(db.Model):
 
     def update_from_netbox(self, data):
         """Update device from Netbox data"""
+        from .device_role import DeviceRole  # Import here to avoid circular dependency
+        
         self.netbox_id = data['id']
         self.name = data['name']
         self.device_type = data.get('device_type', {}).get('model')
         
+        # Get role and ensure it has a color
+        role_name = data.get('role', {}).get('name')
+        role = None
+        if role_name:
+            role = DeviceRole.get_or_create(role_name)
+        
         # Store metadata
         self.meta_data = {
             'manufacturer': data.get('device_type', {}).get('manufacturer', {}).get('name'),
-            'role': data.get('role', {}).get('name'),
+            'role': role_name,
+            'role_color': role.color if role else None,  # Store color in metadata
             'status': data.get('status', {}).get('value'),
             'description': data.get('description', ''),
             'comments': data.get('comments', ''),
@@ -50,6 +59,7 @@ class Device(db.Model):
         }
         
         db.session.add(self)
+        db.session.commit()
 
     def update_interfaces(self, interfaces_data):
         """Update device interfaces from Netbox data"""

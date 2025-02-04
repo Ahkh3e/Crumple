@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, current_app
-from app.models import Cluster, Device, Connection
+from app.models import Cluster, Device, Connection, DeviceRole
 from app.services.netbox import NetboxService
 
 # Create blueprint without url_prefix since it's handled by parent
@@ -43,7 +43,9 @@ def get_cluster(cluster_id):
                         'label': device.name,
                         'type': device.device_type,
                         'interfaces': device.interfaces or [],
-                        'meta_data': dict(device.meta_data) if device.meta_data else {}
+                        'meta_data': dict(device.meta_data) if device.meta_data else {},
+                        'role': device.meta_data.get('role') if device.meta_data else None,
+                        'role_color': device.meta_data.get('role_color') if device.meta_data else None
                     },
                     'position': device.position or {'x': 0, 'y': 0}
                 }

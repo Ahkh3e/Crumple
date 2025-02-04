@@ -12,8 +12,9 @@ CREATE SCHEMA IF NOT EXISTS workboard;
 -- Ensure workboard schema exists
 CREATE SCHEMA IF NOT EXISTS workboard;
 
--- Drop and recreate users table to ensure clean state
+-- Drop and recreate tables to ensure clean state
 DROP TABLE IF EXISTS workboard.users CASCADE;
+DROP TABLE IF EXISTS workboard.device_roles CASCADE;
 
 -- Create users table
 CREATE TABLE workboard.users (
@@ -24,6 +25,11 @@ CREATE TABLE workboard.users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Insert admin user if it doesn't exist
+INSERT INTO workboard.users (username, password_hash, is_admin)
+VALUES ('admin', 'scrypt:32768:8:1$BVKbea4jzS1la6rq$ba3d79a8f41bc8f500f104007b35a7c1a40232dcc96457b45cf8f34897960bd5360565d9e28e1d24369bdeb9e03d5668a8ad4a2927e143c225be8a75b8df4c50', true)
+ON CONFLICT (username) DO NOTHING;
 
 
 -- Create app settings table
@@ -77,6 +83,15 @@ CREATE TABLE workboard.connections (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Create device roles table with predefined roles and colors
+CREATE TABLE workboard.device_roles (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) UNIQUE NOT NULL,
+    color VARCHAR(7) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 
 -- Indexes
 CREATE INDEX idx_clusters_netbox_id ON workboard.clusters(netbox_id);
