@@ -478,7 +478,7 @@ $(document).ready(function() {
             <div class="device-section">
                 <div><span class="device-label">Device:</span> ${nodeData.label || 'Unnamed Device'}</div>
                 <div><span class="device-label">Type:</span> ${nodeData.type || 'N/A'}</div>
-                <div><span class="device-label">Role:</span> ${nodeData.meta_data && nodeData.meta_data.role ? nodeData.meta_data.role : (nodeData.data && nodeData.data.meta_data ? nodeData.data.meta_data.role : 'N/A')}</div>
+                <div><span class="device-label">Role:</span> ${nodeData.metadata && nodeData.metadata.role ? nodeData.metadata.role : (nodeData.data && nodeData.data.metadata ? nodeData.data.metadata.role : 'N/A')}</div>
             </div>
             <div class="interface-section">
                 <div class="interface-header">Interfaces</div>
