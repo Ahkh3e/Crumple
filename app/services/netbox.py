@@ -213,30 +213,110 @@ class NetboxService:
             # Clear existing connections for this cluster
             Connection.query.filter_by(cluster_id=cluster.id).delete()
             
-            # Create new connections
-            processed_cables = set()
+            # Track processed connections to avoid duplicates
+            processed_connections = set()  # Format: (device_a_name, interface_a, device_b_name, interface_b)
+            
+            # First try cable-based connections
             for device in cluster.devices:
-                cables = self.get_device_connections(device.netbox_id)
-                for cable_data in cables:
-                    cable_id = cable_data['id']
-                    if cable_id in processed_cables:
-                        continue
-                    
-                    # Get termination points
-                    a_term = cable_data['a_terminations'][0]['object']
-                    b_term = cable_data['b_terminations'][0]['object']
-                    
-                    # Create connection
-                    connection = Connection(
-                        cluster_id=cluster.id,
-                        device_a_id=Device.query.filter_by(name=a_term['device']['name']).first().id,
-                        interface_a=a_term['name'],
-                        device_b_id=Device.query.filter_by(name=b_term['device']['name']).first().id,
-                        interface_b=b_term['name']
-                    )
-                    connection.update_from_netbox(cable_data)
-                    db.session.add(connection)
-                    processed_cables.add(cable_id)
+                try:
+                    cables = self.get_device_connections(device.netbox_id)
+                    for cable_data in cables:
+                        try:
+                            # Get termination points
+                            a_term = cable_data['a_terminations'][0]['object']
+                            b_term = cable_data['b_terminations'][0]['object']
+                            
+                            # Create unique connection identifier
+                            conn_id = tuple(sorted([
+                                (a_term['device']['name'], a_term['name']),
+                                (b_term['device']['name'], b_term['name'])
+                            ]))
+                            
+                            if conn_id in processed_connections:
+                                continue
+                            
+                            # Create connection
+                            connection = Connection(
+                                cluster_id=cluster.id,
+                                device_a_id=Device.query.filter_by(name=a_term['device']['name']).first().id,
+                                interface_a=a_term['name'],
+                                device_b_id=Device.query.filter_by(name=b_term['device']['name']).first().id,
+                                interface_b=b_term['name']
+                            )
+                            connection.update_from_netbox(cable_data)
+                            db.session.add(connection)
+                            processed_connections.add(conn_id)
+                        except (KeyError, IndexError) as e:
+                            logger.warning(f"Skipping malformed cable data: {str(e)}")
+                            continue
+                except Exception as e:
+                    logger.warning(f"Failed to get cable connections for device {device.name}: {str(e)}")
+                    # Continue to interface-based connections
+            
+            # Then process interface-based connections
+            for device in cluster.devices:
+                try:
+                    interfaces = self.get_device_interfaces(device.netbox_id)
+                    for interface in interfaces:
+                        # Check for connected_endpoints (newer Netbox versions)
+                        if interface.get('connected_endpoints'):
+                            endpoint = interface['connected_endpoints'][0]
+                            connected_to = {
+                                'device': endpoint['device']['name'],
+                                'interface': endpoint['name']
+                            }
+                        # Check for connected_to (older Netbox versions)
+                        elif interface.get('connected_to'):
+                            connected_to = interface['connected_to']
+                        else:
+                            continue
+                        
+                        if not isinstance(connected_to, dict):
+                            continue
+                        
+                        # Get connection details
+                        device_a_name = device.name
+                        interface_a = interface['name']
+                        device_b_name = connected_to.get('device')
+                        interface_b = connected_to.get('interface')
+                        
+                        if not all([device_a_name, interface_a, device_b_name, interface_b]):
+                            continue
+                        
+                        # Create unique connection identifier
+                        conn_id = tuple(sorted([
+                            (device_a_name, interface_a),
+                            (device_b_name, interface_b)
+                        ]))
+                        
+                        if conn_id in processed_connections:
+                            continue
+                        
+                        # Find device records
+                        device_a = Device.query.filter_by(name=device_a_name).first()
+                        device_b = Device.query.filter_by(name=device_b_name).first()
+                        
+                        if not device_a or not device_b:
+                            continue
+                        
+                        # Create connection
+                        connection = Connection(
+                            cluster_id=cluster.id,
+                            device_a_id=device_a.id,
+                            interface_a=interface_a,
+                            device_b_id=device_b.id,
+                            interface_b=interface_b,
+                            meta_data={
+                                'status': 'connected',
+                                'created': interface.get('created'),
+                                'last_updated': interface.get('last_updated')
+                            }
+                        )
+                        db.session.add(connection)
+                        processed_connections.add(conn_id)
+                except Exception as e:
+                    logger.warning(f"Failed to process interfaces for device {device.name}: {str(e)}")
+                    continue
             
             db.session.commit()
             logger.info(f"Successfully synced cluster {cluster_id}")

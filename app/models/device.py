@@ -67,12 +67,16 @@ class Device(db.Model):
         for interface in interfaces_data:
             # Get connected device info if available
             connected_to = None
+            # Check for connected_endpoints (newer Netbox versions)
             if interface.get('connected_endpoints'):
                 endpoint = interface['connected_endpoints'][0]
                 connected_to = {
                     'device': endpoint['device']['name'],
                     'interface': endpoint['name']
                 }
+            # Check for connected_to (older Netbox versions)
+            elif interface.get('connected_to'):
+                connected_to = interface['connected_to']
             
             # Store interface info
             self.interfaces.append({
