@@ -12,6 +12,14 @@ Crumple is a web-based tool for visualizing and managing Netbox clusters. It pro
 - Persistent layout saving
 - Asynchronous task processing with RabbitMQ
 
+<img width="1416" alt="login" src="https://github.com/user-attachments/assets/65e113d3-dc85-447a-ad04-c83cffd661aa" />
+
+<img width="1394" alt="netbox config" src="https://github.com/user-attachments/assets/6dee2fea-d181-4318-b426-0792dfc2b9ae" />
+
+<img width="1490" alt="landing page" src="https://github.com/user-attachments/assets/d67a6e91-6771-4992-a8e8-8ea51240e198" />
+
+<img width="1477" alt="graph" src="https://github.com/user-attachments/assets/fd0fc2c0-836d-4959-9d55-d97597d85ac3" />
+
 ## Architecture
 
 - **Frontend**: Flask templates with Cytoscape.js for visualization (Port 3000)
